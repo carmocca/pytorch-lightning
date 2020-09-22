@@ -336,7 +336,11 @@ class ProgressBar(ProgressBarBase):
         super().on_train_batch_end(trainer, pl_module, batch, batch_idx, dataloader_idx)
         if self.is_enabled and self.train_batch_idx % self.refresh_rate == 0:
             self.main_progress_bar.update(self.refresh_rate)
-            self.main_progress_bar.set_postfix(trainer.progress_bar_dict)
+            postfix = trainer.progress_bar_dict
+            if 'train_running_loss' in postfix:
+                postfix['loss'] = postfix.pop('train_loss')
+            postfix.pop('valid_loss', None)
+            self.main_progress_bar.set_postfix(postfix)
 
     def on_validation_start(self, trainer, pl_module):
         super().on_validation_start(trainer, pl_module)
@@ -348,6 +352,11 @@ class ProgressBar(ProgressBarBase):
         if self.is_enabled and self.val_batch_idx % self.refresh_rate == 0:
             self.val_progress_bar.update(self.refresh_rate)
             self.main_progress_bar.update(self.refresh_rate)
+            postfix = trainer.progress_bar_dict
+            if 'valid_loss' in postfix:
+                postfix['loss'] = postfix.pop('valid_loss')
+            postfix.pop('train_loss', None)
+            self.val_progress_bar.set_postfix(postfix)
 
     def on_validation_end(self, trainer, pl_module):
         super().on_validation_end(trainer, pl_module)

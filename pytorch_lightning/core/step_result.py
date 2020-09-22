@@ -475,7 +475,7 @@ class TrainResult(Result):
     def __init__(
         self,
         minimize: Optional[Tensor] = None,
-        early_stop_on: Tensor = None,
+        early_stop_on: Optional[Tensor] = None,
         checkpoint_on: Union[Tensor, bool] = None,
         hiddens: Optional[Tensor] = None,
     ):
@@ -641,6 +641,7 @@ class TrainResult(Result):
 class EvalResult(Result):
     def __init__(
         self,
+        track: Optional[Tensor] = None,
         early_stop_on: Optional[Tensor] = None,
         checkpoint_on: Optional[Tensor] = None,
         hiddens: Optional[Tensor] = None,

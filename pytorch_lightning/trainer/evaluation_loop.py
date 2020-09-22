@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pytorch_lightning.trainer.supporters import PredictionCollection
+from pytorch_lightning.trainer.supporters import PredictionCollection, TensorRunningAccum
 from pytorch_lightning.core.step_result import Result, EvalResult
 from pytorch_lightning.utilities.exceptions import MisconfigurationException
 from pytorch_lightning.utilities.model_utils import is_overridden
@@ -25,6 +25,7 @@ class EvaluationLoop(object):
         self.outputs = []
         self.predictions = None
         self.max_batches = None
+        self.running_loss = TensorRunningAccum(window_length=20)
 
     def on_trainer_init(self):
         self.trainer.num_val_batches = []
@@ -144,15 +145,24 @@ class EvaluationLoop(object):
         else:
             output = self.trainer.accelerator_backend.validation_step(args)
 
-        # track batch size for weighted average
-        is_result_obj = isinstance(output, Result)
-        if is_result_obj:
+        loss = None
+        if isinstance(output, Result):
+            # allow only EvalResult when using structured results (from val_step)
+            if not isinstance(output, EvalResult):
+                m = 'only EvalResults or dicts are allowed from validation_step'
+                raise MisconfigurationException(m)
+
+            # track batch size for weighted average
             output.track_batch_size(len(batch))
 
-        # allow only EvalResult when using structured results (from val_step)
-        if is_result_obj and not isinstance(output, EvalResult):
-            m = 'only EvalResults or dicts are allowed from validation_step'
-            raise MisconfigurationException(m)
+            if hasattr(output, "minimize"):
+                loss = output.minimize.detach().clone()
+
+        if isinstance(output, dict) and "loss" in output:
+            loss = output["loss"].detach().clone()
+
+        if loss is not None:
+            self.running_loss.append(loss.mean())
 
         return output
 
@@ -173,9 +183,7 @@ class EvaluationLoop(object):
     def log_epoch_metrics(self, eval_results, test_mode):
         using_eval_result = self.is_using_eval_results()
         eval_loop_results = self.trainer.logger_connector.on_evaluation_epoch_end(
-            eval_results,
-            using_eval_result,
-            test_mode
+            eval_results, using_eval_result, test_mode
         )
         return eval_loop_results
 
